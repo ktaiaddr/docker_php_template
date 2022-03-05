@@ -1,0 +1,54 @@
+version: '3'
+
+services:
+  web:
+    image: php:8.1-apache-buster
+#    image: php:7.3.27-apache-buster
+    ports:
+      - "${WEB_IP}:443:443"
+    volumes:
+      - ./:/var/www/html/
+      - ./docker_config/web/web.conf:/etc/apache2/sites-available/web.conf
+      - ./docker_config/web/ssl/ssl.crt:${SSLCertificateFile}
+      - ./docker_config/web/ssl/ssl.key:${SSLCertificateKeyFile}
+    environment:
+      - TZ=Asia/Tokyo
+    working_dir: /var/www/html/
+    tty: true
+    env_file:
+      - ./.env
+    entrypoint: /bin/bash
+    command: >
+      -c "
+      apt-get update;
+      apt-get install -y libzip-dev;
+      
+      docker-php-ext-install zip;
+      php -r \"copy('https://getcomposer.org/installer', 'composer-setup.php');\" &&
+      php composer-setup.php &&
+      mv composer.phar /usr/local/bin/composer;
+      rm composer-setup.php;
+      
+      userdel -r www-data;
+      groupadd -g ${LOCALGID} www-data;
+      useradd -M -u ${LOCALUID} -g ${LOCALGID} -s /sbin/nologin www-data;
+      a2enmod ssl;
+      a2enmod rewrite;
+      a2ensite ssl;
+      a2ensite web;
+      a2dissite 000-default;
+      cp /usr/local/etc/php/php.ini-development /usr/local/etc/php/php.ini;
+      sed -i.bk -e 's/memory_limit = 128M/memory_limit = 8192M/gi' /usr/local/etc/php/php.ini ;
+      
+      docker-php-ext-install pdo_mysql mysqli;
+      
+      apachectl configtest;
+      apache2-foreground
+      "
+
+  mailhog:
+    image: "mailhog/mailhog"
+    ports:
+      - "${WEB_IP}:8025:8025"
+    tty: true
+
